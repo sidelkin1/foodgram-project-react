@@ -1,9 +1,12 @@
 from django.contrib.auth import get_user_model
+
 from djoser.serializers import UserCreateSerializer, UserSerializer
 from drf_extra_fields.fields import Base64ImageField
-from recipes.models import Ingredient, Recipe, Tag, RecipeIngredient
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
+
+from recipes.models import (Favorite, Ingredient, Purchase, Recipe,
+                            RecipeIngredient, Tag)
 from users.models import Subscription
 
 User = get_user_model()
@@ -103,30 +106,26 @@ class RecipeSerializer(serializers.ModelSerializer):
         read_only=True,
         many=True,
     )
+    is_in_shopping_cart = serializers.SerializerMethodField()
+    is_favorited = serializers.SerializerMethodField()
 
     class Meta:
         model = Recipe
         fields = ('id', 'tags', 'author', 'ingredients',
-                  'name', 'image', 'text', 'cooking_time')
+                  'name', 'image', 'text', 'cooking_time',
+                  'is_in_shopping_cart', 'is_favorited')
 
     def validate(self, data):
         data['ingredients'] = self.initial_data['ingredients']
         data['tags'] = self.initial_data['tags']
         return data
 
-    def set_ingredients(self, recipe, ingredients):
-        objs = (RecipeIngredient(recipe=recipe,
-                                 ingredient_id=ingredient['id'],
-                                 amount=ingredient['amount'])
-                for ingredient in ingredients)
-        RecipeIngredient.objects.bulk_create(objs)
-
     def create(self, validated_data):
         ingredients = validated_data.pop('ingredients')
         tags = validated_data.pop('tags')
         recipe = Recipe.objects.create(**validated_data)
         recipe.tags.set(tags)
-        self.set_ingredients(recipe, ingredients)
+        self._set_ingredients(recipe, ingredients)
         return recipe
 
     def update(self, instance, validated_data):
@@ -137,6 +136,27 @@ class RecipeSerializer(serializers.ModelSerializer):
         instance.tags.clear()
         instance.tags.set(tags)
         RecipeIngredient.objects.filter(recipe=instance).delete()
-        self.set_ingredients(instance, ingredients)
+        self._set_ingredients(instance, ingredients)
         instance.save()
         return instance
+
+    def _set_ingredients(self, recipe, ingredients):
+        objs = (RecipeIngredient(recipe=recipe,
+                                 ingredient_id=ingredient['id'],
+                                 amount=ingredient['amount'])
+                for ingredient in ingredients)
+        RecipeIngredient.objects.bulk_create(objs)
+
+    def get_is_in_shopping_cart(self, obj):
+        user = self.context['request'].user
+        return (
+            user.is_authenticated
+            and Purchase.objects.filter(user=user, recipe=obj).exists()
+        )
+
+    def get_is_favorited(self, obj):
+        user = self.context['request'].user
+        return (
+            user.is_authenticated
+            and Favorite.objects.filter(user=user, recipe=obj).exists()
+        )

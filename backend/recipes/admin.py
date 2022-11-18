@@ -21,3 +21,13 @@ class TagAdmin(admin.ModelAdmin):
 @admin.register(models.RecipeIngredient)
 class RecipeIngredientAdmin(admin.ModelAdmin):
     pass
+
+
+@admin.register(models.Favorite)
+class FavoriteAdmin(admin.ModelAdmin):
+    pass
+
+
+@admin.register(models.Purchase)
+class PurchaseAdmin(admin.ModelAdmin):
+    pass

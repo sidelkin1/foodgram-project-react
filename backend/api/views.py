@@ -1,26 +1,30 @@
 from django.contrib.auth import get_user_model
+from django.db.models import F, Sum
+
+from django_filters.rest_framework import DjangoFilterBackend
 from djoser.views import UserViewSet
-from recipes.models import Ingredient, Recipe, Tag
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, renderer_classes
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework_csv import renderers
+
+from recipes.models import (Favorite, Ingredient, Purchase, Recipe,
+                            RecipeIngredient, Tag)
 from users.models import Subscription
 
-from . import serializers, permissions
+from . import filters, paginations, permissions, renderers, serializers
 
 User = get_user_model()
 
 
 class CustomUserViewSet(UserViewSet):
     queryset = User.objects.order_by('id')
+    pagination_class = paginations.LimitPageNumberPagination
 
     def get_queryset(self):
         queryset = super().get_queryset()
         if self.action == 'subscriptions':
             user = self.request.user
-            subscriptions = user.subscriptions.values('author')
-            queryset = queryset.filter(id__in=subscriptions)
+            queryset = queryset.filter(subscribers__user=user)
         return queryset
 
     def get_serializer_class(self):
@@ -60,35 +64,87 @@ class CustomUserViewSet(UserViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class MyUserRenderer(renderers.CSVRenderer):
-    header = ['first', 'last', 'email']
-
-
-class TagsViewSet(viewsets.ReadOnlyModelViewSet):
+class TagViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tag.objects.all()
     serializer_class = serializers.TagSerializer
 
 
-class IngredientsViewSet(viewsets.ReadOnlyModelViewSet):
+class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Ingredient.objects.all()
     serializer_class = serializers.IngredientSerializer
+    filter_backends = (filters.IngredientSearchFilter,)
+    search_fields = ('^name',)
 
 
 class RecipeViewSet(viewsets.ModelViewSet):
-    queryset = Recipe.objects.all()
+    queryset = Recipe.objects.order_by('id')
     serializer_class = serializers.RecipeSerializer
     permission_classes = (permissions.IsAuthorOrReadOnly,)
+    pagination_class = paginations.LimitPageNumberPagination
+    filter_backends = (DjangoFilterBackend,)
+    filterset_class = filters.RecipeFilterSet
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
 
+    @action(('post',), detail=True,
+            permission_classes=(permissions.IsAuthenticated,))
+    def shopping_cart(self, request, *args, **kwargs):
+        return self._add_object(Purchase, request.user)
 
-@api_view(['GET'])
-@renderer_classes((MyUserRenderer,))
-def my_view(request):
-    users = User.objects.filter(is_active=True)
-    content = [{'first': user.first_name,
-                'last': user.last_name,
-                'email': user.email}
-               for user in users]
-    return Response(content)
+    @shopping_cart.mapping.delete
+    def del_shopping_cart(self, request, *args, **kwargs):
+        return self._delete_object(Purchase, request.user)
+
+    @action(('post',), detail=True,
+            permission_classes=(permissions.IsAuthenticated,))
+    def favorite(self, request, *args, **kwargs):
+        return self._add_object(Favorite, request.user)
+
+    @favorite.mapping.delete
+    def del_favorite(self, request, *args, **kwargs):
+        return self._delete_object(Favorite, request.user)
+
+    def _add_object(self, model, user):
+        recipe = self.get_object()
+        if model.objects.filter(user=user, recipe=recipe).exists():
+            return Response(
+                {'errors': 'Ошибка добавления рецепта!'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        model.objects.create(user=user, recipe=recipe)
+        serializer = serializers.RecipePreviewSerializer(recipe)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def _delete_object(self, model, user):
+        recipe = self.get_object()
+        obj = model.objects.filter(user=user, recipe=recipe)
+        if not obj.exists():
+            return Response(
+                {'errors': 'Ошибка удаления рецепта!'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        obj.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, renderer_classes=(renderers.IngredientCSVRenderer,),
+            permission_classes=(permissions.IsAuthenticated,))
+    def download_shopping_cart(self, request, *args, **kwargs):
+        ingredient_fields = {
+            'Ингредиент': F('ingredient__name'),
+            'Ед. изм.': F('ingredient__measurement_unit'),
+        }
+        amount_sum = {'Количество': Sum('amount')}
+        content = list(
+            RecipeIngredient.objects
+            .filter(recipe__purchases__user=request.user)
+            .values(**ingredient_fields)
+            .annotate(**amount_sum)
+        )
+        return Response(content)
+
+    def get_renderer_context(self):
+        context = super().get_renderer_context()
+        if self.action == 'download_shopping_cart':
+            context['encoding'] = 'cp1251'
+        return context
