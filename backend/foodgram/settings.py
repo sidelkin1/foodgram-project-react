@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'recipes.apps.RecipesConfig',
     'api.apps.ApiConfig',
+    'django_filters',
 ]
 
 MIDDLEWARE = [
@@ -103,7 +104,6 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.TokenAuthentication',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'api.paginations.LimitPageNumberPagination',
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ),
