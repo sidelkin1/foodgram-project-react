@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import F, Sum
 
 from django_filters.rest_framework import DjangoFilterBackend
@@ -17,11 +18,10 @@ User = get_user_model()
 
 
 class CustomUserViewSet(UserViewSet):
-    queryset = User.objects.order_by('id')
     pagination_class = paginations.LimitPageNumberPagination
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = User.objects.order_by('id')
         if self.action == 'subscriptions':
             user = self.request.user
             queryset = queryset.filter(subscribers__user=user)
@@ -38,30 +38,33 @@ class CustomUserViewSet(UserViewSet):
 
     @action(('post',), detail=True)
     def subscribe(self, request, *args, **kwargs):
-        user = request.user
-        author = self.get_object()
-        subscription = Subscription.objects.filter(user=user, author=author)
-        if (user == author) or subscription.exists():
-            return Response(
-                {'errors': 'Ошибка подписки!'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        Subscription.objects.create(user=user, author=author)
-        serializer = self.get_serializer(author)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return self._subscribe(request, True, 'Ошибка подписки!')
 
     @subscribe.mapping.delete
     def del_subscribe(self, request, *args, **kwargs):
+        return self._subscribe(request, False, 'Ошибка отписки!')
+
+    @transaction.atomic
+    def _subscribe(self, request, create_subscription, error_message):
         user = request.user
         author = self.get_object()
         subscription = Subscription.objects.filter(user=user, author=author)
-        if (user == author) or (not subscription.exists()):
+        if (
+            (user == author)
+            or (create_subscription and subscription.exists())
+            or not (create_subscription or subscription.exists())
+        ):
             return Response(
-                {'errors': 'Ошибка отписки!'},
+                {'errors': error_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        subscription.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        if create_subscription:
+            Subscription.objects.create(user=user, author=author)
+            serializer = self.get_serializer(author)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            subscription.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
@@ -105,6 +108,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def del_favorite(self, request, *args, **kwargs):
         return self._delete_object(Favorite, request.user)
 
+    @transaction.atomic
     def _add_object(self, model, user):
         recipe = self.get_object()
         if model.objects.filter(user=user, recipe=recipe).exists():
@@ -116,6 +120,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         serializer = serializers.RecipePreviewSerializer(recipe)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @transaction.atomic
     def _delete_object(self, model, user):
         recipe = self.get_object()
         obj = model.objects.filter(user=user, recipe=recipe)

@@ -23,6 +23,9 @@ INSTALLED_APPS = [
     'recipes.apps.RecipesConfig',
     'api.apps.ApiConfig',
     'django_filters',
+    'colorfield',
+    'django_extensions',
+    'pytils',
 ]
 
 MIDDLEWARE = [

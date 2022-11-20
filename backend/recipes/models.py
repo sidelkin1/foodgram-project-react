@@ -2,6 +2,10 @@ from django.contrib.auth import get_user_model
 from django.core import validators
 from django.db import models
 
+from colorfield.fields import ColorField
+from django_extensions.db.fields import AutoSlugField
+from pytils.translit import slugify
+
 User = get_user_model()
 
 
@@ -38,14 +42,15 @@ class Tag(models.Model):
         unique=True,
         help_text='Введите название тега',
     )
-    color = models.CharField(
+    color = ColorField(
         verbose_name='Цвет',
-        max_length=7,
         unique=True,
         help_text='Укажите цвет',
     )
-    slug = models.SlugField(
+    slug = AutoSlugField(
         verbose_name='Тег',
+        populate_from='name',
+        slugify_function=slugify,
         max_length=200,
         unique=True,
         help_text='Введите тег',

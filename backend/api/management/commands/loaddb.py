@@ -69,13 +69,13 @@ class Command(BaseCommand):
                         media.mkdir(parents=True, exist_ok=True)
                         for image in path.glob('*.jpg'):
                             shutil.copy(image, media)
+                    df.drop(columns='id', inplace=True)
 
                     df.to_sql(
                         name=table_name,
                         con=conn,
                         if_exists='append',
                         index=False,
-                        index_label='id'
                     )
 
                     self.stdout.write(
