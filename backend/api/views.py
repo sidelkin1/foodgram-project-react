@@ -24,7 +24,7 @@ class CustomUserViewSet(UserViewSet):
         queryset = User.objects.order_by('id')
         if self.action == 'subscriptions':
             user = self.request.user
-            queryset = queryset.filter(subscribers__user=user)
+            return queryset.filter(subscribers__user=user)
         return queryset
 
     def get_serializer_class(self):
@@ -62,9 +62,8 @@ class CustomUserViewSet(UserViewSet):
             Subscription.objects.create(user=user, author=author)
             serializer = self.get_serializer(author)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            subscription.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
+        subscription.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
