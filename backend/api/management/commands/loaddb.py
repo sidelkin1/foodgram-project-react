@@ -64,6 +64,7 @@ class Command(BaseCommand):
                             date_joined=datetime.datetime.now(),
                         )
                     elif table_name == 'recipes_recipe':
+                        df = df.assign(pub_date=datetime.datetime.now())
                         path = self.BASE_DIR.joinpath('data')
                         media = self.BASE_DIR.joinpath('media', 'recipes')
                         media.mkdir(parents=True, exist_ok=True)

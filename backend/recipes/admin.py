@@ -3,6 +3,11 @@ from django.contrib import admin
 from . import models
 
 
+class IngredientInline(admin.TabularInline):
+    model = models.RecipeIngredient
+    extra = 2
+
+
 @admin.register(models.Ingredient)
 class IngredientAdmin(admin.ModelAdmin):
     pass
@@ -10,7 +15,7 @@ class IngredientAdmin(admin.ModelAdmin):
 
 @admin.register(models.Recipe)
 class RecipeAdmin(admin.ModelAdmin):
-    pass
+    inlines = (IngredientInline,)
 
 
 @admin.register(models.Tag)
