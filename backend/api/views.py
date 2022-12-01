@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import F, Sum
+from django.db.models import Count, F, Sum
 
 from django_filters.rest_framework import DjangoFilterBackend
 from djoser.views import UserViewSet
@@ -13,6 +13,7 @@ from recipes.models import (Favorite, Ingredient, Purchase, Recipe,
 from users.models import Subscription
 
 from . import filters, paginations, permissions, renderers, serializers
+from .utils import get_exists_subquery
 
 User = get_user_model()
 
@@ -21,11 +22,18 @@ class CustomUserViewSet(UserViewSet):
     pagination_class = paginations.LimitPageNumberPagination
 
     def get_queryset(self):
+        user = self.request.user
         queryset = User.objects.order_by('id')
         if self.action == 'subscriptions':
-            user = self.request.user
-            return queryset.filter(subscribers__user=user)
-        return queryset
+            return (
+                queryset
+                .filter(subscribers__user_id=user.id)
+                .annotate(recipes_count=Count('recipes'))
+            )
+        subquery = get_exists_subquery(
+            Subscription, user, 'is_subscribed', 'author'
+        )
+        return queryset.annotate(**subquery)
 
     def get_serializer_class(self):
         if self.action in ('subscriptions', 'subscribe'):
@@ -36,32 +44,32 @@ class CustomUserViewSet(UserViewSet):
     def subscriptions(self, request, *args, **kwargs):
         return self.list(request, *args, **kwargs)
 
+    @transaction.atomic
     @action(('post',), detail=True)
     def subscribe(self, request, *args, **kwargs):
-        return self._subscribe(request, True, 'Ошибка подписки!')
-
-    @subscribe.mapping.delete
-    def del_subscribe(self, request, *args, **kwargs):
-        return self._subscribe(request, False, 'Ошибка отписки!')
-
-    @transaction.atomic
-    def _subscribe(self, request, create_subscription, error_message):
         user = request.user
         author = self.get_object()
         subscription = Subscription.objects.filter(user=user, author=author)
-        if (
-            (user == author)
-            or (create_subscription and subscription.exists())
-            or not (create_subscription or subscription.exists())
-        ):
+        if (user == author) or subscription.exists():
             return Response(
-                {'errors': error_message},
+                {'errors': 'Ошибка подписки!'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if create_subscription:
-            Subscription.objects.create(user=user, author=author)
-            serializer = self.get_serializer(author)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        Subscription.objects.create(user=user, author=author)
+        serializer = self.get_serializer(author)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @transaction.atomic
+    @subscribe.mapping.delete
+    def del_subscribe(self, request, *args, **kwargs):
+        user = request.user
+        author = self.get_object()
+        subscription = Subscription.objects.filter(user=user, author=author)
+        if (user == author) or (not subscription.exists()):
+            return Response(
+                {'errors': 'Ошибка отписки!'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         subscription.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -85,6 +93,16 @@ class RecipeViewSet(viewsets.ModelViewSet):
     pagination_class = paginations.LimitPageNumberPagination
     filter_backends = (DjangoFilterBackend,)
     filterset_class = filters.RecipeFilterSet
+
+    def get_queryset(self):
+        user = self.request.user
+        subquery = get_exists_subquery(
+            Purchase, user, 'is_in_shopping_cart', 'recipe'
+        )
+        subquery |= get_exists_subquery(
+            Favorite, user, 'is_favorited', 'recipe'
+        )
+        return Recipe.objects.annotate(**subquery)
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)

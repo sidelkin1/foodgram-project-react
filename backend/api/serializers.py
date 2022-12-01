@@ -6,9 +6,7 @@ from drf_extra_fields.fields import Base64ImageField
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from recipes.models import (Favorite, Ingredient, Purchase, Recipe,
-                            RecipeIngredient, Tag)
-from users.models import Subscription
+from recipes.models import Ingredient, Recipe, RecipeIngredient, Tag
 
 User = get_user_model()
 
@@ -30,19 +28,20 @@ class CustomUserCreateSerializer(UserCreateSerializer):
 
 
 class CustomUserSerializer(UserSerializer):
-    is_subscribed = serializers.SerializerMethodField()
+    is_subscribed = serializers.ReadOnlyField()
 
     class Meta:
         model = User
         fields = ('id', 'email', 'username',
                   'first_name', 'last_name', 'is_subscribed')
 
-    def get_is_subscribed(self, obj):
-        user = self.context['request'].user
-        return (
-            user.is_authenticated
-            and Subscription.objects.filter(user=user, author=obj).exists()
-        )
+
+class RecipePreviewListSerializer(serializers.ListSerializer):
+    def to_representation(self, data):
+        request = self.context['request']
+        if limit := request.GET.get('recipes_limit'):
+            data = data[:int(limit)]
+        return super().to_representation(data)
 
 
 class RecipePreviewSerializer(serializers.ModelSerializer):
@@ -52,26 +51,21 @@ class RecipePreviewSerializer(serializers.ModelSerializer):
         model = Recipe
         fields = ('id', 'name', 'image', 'cooking_time')
         read_only_fields = ('id', 'name', 'image', 'cooking_time')
+        list_serializer_class = RecipePreviewListSerializer
 
 
 class SubscriptionSerializer(UserSerializer):
-    recipes = serializers.SerializerMethodField()
-    recipes_count = serializers.SerializerMethodField()
+    recipes = RecipePreviewSerializer(
+        many=True,
+        read_only=True,
+        source='recipes.all'
+    )
+    recipes_count = serializers.ReadOnlyField()
 
     class Meta:
         model = User
         fields = ('id', 'email', 'username', 'first_name',
                   'last_name', 'recipes', 'recipes_count')
-
-    def get_recipes(self, obj):
-        request = self.context['request']
-        queryset = Recipe.objects.filter(author=obj)
-        if limit := request.GET.get('recipes_limit'):
-            queryset = queryset[:int(limit)]
-        return RecipePreviewSerializer(queryset, many=True).data
-
-    def get_recipes_count(self, obj):
-        return Recipe.objects.filter(author=obj).count()
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -103,12 +97,12 @@ class RecipeSerializer(serializers.ModelSerializer):
     author = CustomUserSerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
     ingredients = RecipeIngredientSerializer(
-        source='ingredient_list',
+        source='ingredient_list.all',
         read_only=True,
         many=True,
     )
-    is_in_shopping_cart = serializers.SerializerMethodField()
-    is_favorited = serializers.SerializerMethodField()
+    is_in_shopping_cart = serializers.ReadOnlyField()
+    is_favorited = serializers.ReadOnlyField()
 
     class Meta:
         model = Recipe
@@ -149,17 +143,3 @@ class RecipeSerializer(serializers.ModelSerializer):
                                  amount=ingredient['amount'])
                 for ingredient in ingredients)
         RecipeIngredient.objects.bulk_create(objs)
-
-    def get_is_in_shopping_cart(self, obj):
-        user = self.context['request'].user
-        return (
-            user.is_authenticated
-            and Purchase.objects.filter(user=user, recipe=obj).exists()
-        )
-
-    def get_is_favorited(self, obj):
-        user = self.context['request'].user
-        return (
-            user.is_authenticated
-            and Favorite.objects.filter(user=user, recipe=obj).exists()
-        )

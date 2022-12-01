@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
 
 import pandas as pd
@@ -56,7 +57,7 @@ class Command(BaseCommand):
 
                     if table_name == 'auth_user':
                         df = df.assign(
-                            password='12345',
+                            password=make_password('12345'),
                             last_login=pd.NaT,
                             is_superuser=False,
                             is_staff=False,
