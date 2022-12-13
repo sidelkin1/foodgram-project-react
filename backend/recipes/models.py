@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core import validators
 from django.db import models
 
+from api.utils import get_exists_subquery
 from colorfield.fields import ColorField
 from django_extensions.db.fields import AutoSlugField
 from pytils.translit import slugify
@@ -64,7 +65,20 @@ class Tag(models.Model):
         return self.name
 
 
+class RecipeQuerySet(models.QuerySet):
+    def with_is_fields(self, user):
+        subquery = get_exists_subquery(
+            Purchase, user, 'is_in_shopping_cart', 'recipe'
+        )
+        subquery |= get_exists_subquery(
+            Favorite, user, 'is_favorited', 'recipe'
+        )
+        return self.annotate(**subquery)
+
+
 class Recipe(models.Model):
+    objects = RecipeQuerySet.as_manager()
+
     author = models.ForeignKey(
         User,
         verbose_name='Автор рецепта',
@@ -120,7 +134,14 @@ class Recipe(models.Model):
         return self.name
 
 
+class RecipeIngredientQuerySet(models.QuerySet):
+    def purchases(self, user):
+        return self.filter(recipe__purchases__user=user)
+
+
 class RecipeIngredient(models.Model):
+    objects = RecipeIngredientQuerySet.as_manager()
+
     recipe = models.ForeignKey(
         Recipe,
         verbose_name='Рецепт',

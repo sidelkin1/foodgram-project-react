@@ -25,7 +25,7 @@ class Command(BaseCommand):
     BASE_DIR = Path(settings.BASE_DIR)
 
     DB_TABLES = {
-        'auth_user.csv': 'auth_user',
+        'users_user.csv': 'users_user',
         'recipes_ingredient.csv': 'recipes_ingredient',
         'recipes_tag.csv': 'recipes_tag',
         'recipes_recipe.csv': 'recipes_recipe',
@@ -55,7 +55,7 @@ class Command(BaseCommand):
                     path = self.BASE_DIR.joinpath('data', file_name)
                     df = pd.read_csv(path)
 
-                    if table_name == 'auth_user':
+                    if table_name == 'users_user':
                         df = df.assign(
                             password=make_password('12345'),
                             last_login=pd.NaT,

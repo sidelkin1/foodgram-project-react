@@ -5,7 +5,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'django-insecure-605^#!cvs0uic+sh_2*_ad*r_jv^b)os45c#0x#*7nn16e4ld3'
 
-DEBUG = os.getenv('DJANGO_DEBUG', default='True') == 'True'
+DEBUG = os.getenv('DJANGO_DEBUG', default='False') == 'True'
 
 ALLOWED_HOSTS = ['*']
 
@@ -96,7 +96,10 @@ USE_L10N = True
 USE_TZ = True
 
 STATIC_URL = '/static_backend/'
-STATIC_ROOT = BASE_DIR / 'static_backend'
+if DEBUG:
+    STATICFILES_DIRS = (BASE_DIR / 'static_backend',)
+else:
+    STATIC_ROOT = BASE_DIR / 'static_backend'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -125,3 +128,7 @@ DJOSER = {
         'current_user': 'api.serializers.CustomUserSerializer',
     },
 }
+
+USE_X_FORWARDED_HOST = True
+
+AUTH_USER_MODEL = 'users.User'

@@ -1,7 +1,59 @@
-from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AbstractUser, UserManager
 from django.db import models
+from django.db.models import Count, F, Q
+from django.db.models.functions import Coalesce
 
-User = get_user_model()
+from api.utils import get_exists_subquery
+
+
+class UserQuerySet(models.QuerySet):
+    def subscriptions(self, user):
+        return (
+            self
+            .filter(subscribers__user_id=user.id)
+            .annotate(recipes_count=Coalesce(Count('recipes'), 0))
+        )
+
+    def with_is_subscribed(self, user):
+        subquery = get_exists_subquery(
+            Subscription, user, 'is_subscribed', 'author'
+        )
+        return self.annotate(**subquery)
+
+
+class CustomUserManager(UserManager.from_queryset(UserQuerySet)):
+    """
+    Необходим для успешной миграции. Если просто написать в модели User
+        objects = UserManager.from_queryset(UserQuerySet)()
+    то возникает ошибка
+        Please note that you need to inherit from managers you dynamically
+        generated with 'from_queryset()'.
+    """
+
+
+class User(AbstractUser):
+    objects = CustomUserManager()
+
+    email = models.EmailField(
+        verbose_name='Email',
+        unique=True,
+        help_text='Введите адрес email',
+    )
+    first_name = models.CharField(
+        verbose_name='Имя',
+        max_length=150,
+        help_text='Введите имя пользователя',
+    )
+    last_name = models.CharField(
+        verbose_name='Фамилия',
+        max_length=150,
+        help_text='Введите фамилию пользователя',
+    )
+
+    class Meta:
+        ordering = ('id',)
+        verbose_name = 'Пользователь'
+        verbose_name_plural = 'Пользователи'
 
 
 class Subscription(models.Model):
@@ -25,5 +77,9 @@ class Subscription(models.Model):
             models.UniqueConstraint(
                 fields=('user', 'author'),
                 name='unique_subscription',
+            ),
+            models.CheckConstraint(
+                check=~Q(user=F('author')),
+                name='prevent_self_follow',
             ),
         )

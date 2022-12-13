@@ -15,8 +15,10 @@ class IngredientSearchFilter(SearchFilter):
 class RecipeFilterSet(FilterSet):
     tags = filters.AllValuesMultipleFilter(field_name='tags__slug')
     author = filters.AllValuesFilter()
-    is_favorited = filters.BooleanFilter()
-    is_in_shopping_cart = filters.BooleanFilter()
+    is_favorited = filters.BooleanFilter(label='Избранные рецепты')
+    is_in_shopping_cart = filters.BooleanFilter(
+        label='Добавлен в корзину'
+    )
 
     class Meta:
         model = Recipe
