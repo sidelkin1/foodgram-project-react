@@ -1,6 +1,6 @@
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.db import models
-from django.db.models import Count, F, Q
+from django.db.models import Count, F, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 
 from api.utils import get_exists_subquery
@@ -8,17 +8,27 @@ from api.utils import get_exists_subquery
 
 class UserQuerySet(models.QuerySet):
     def subscriptions(self, user):
-        return (
-            self
-            .filter(subscribers__user_id=user.id)
-            .annotate(recipes_count=Coalesce(Count('recipes'), 0))
-        )
+        return self.filter(subscribers__user_id=user.id)
 
     def with_is_subscribed(self, user):
         subquery = get_exists_subquery(
             Subscription, user, 'is_subscribed', 'author'
         )
         return self.annotate(**subquery)
+
+    def with_recipes_count(self):
+        # Почему не сделан *обычный* 'annotate'?
+        #   annotate(recipes_count=Coalesce(Count('recipes'), 0))
+        # Делаем через подзапрос, чтобы
+        # 1) не возникали конфликты с другими *обычными* 'annotate'
+        # 2) не нарушалась сортировка записей в БД
+        subquery = Subquery(
+            User.objects
+            .filter(pk=OuterRef('pk'))
+            .annotate(recipes_count=Coalesce(Count('recipes'), 0))
+            .values('recipes_count')
+        )
+        return self.annotate(recipes_count=subquery)
 
 
 class CustomUserManager(UserManager.from_queryset(UserQuerySet)):

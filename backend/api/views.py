@@ -21,7 +21,7 @@ class CustomUserViewSet(UserViewSet, mixins.AddDeleteObjectMixin):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = User.objects.with_is_subscribed(user)
+        queryset = User.objects.with_is_subscribed(user).with_recipes_count()
         if self.action == 'subscriptions':
             return queryset.subscriptions(user)
         return queryset
@@ -74,6 +74,8 @@ class RecipeViewSet(viewsets.ModelViewSet, mixins.AddDeleteObjectMixin):
         user = self.request.user
         return (
             Recipe.objects.with_is_fields(user)
+            # Данный способ позволяет передать во вложенный сериализатор
+            # автора с нужными доп. полями (например, 'is_subscribed')
             .prefetch_related(
                 Prefetch(
                     'author',

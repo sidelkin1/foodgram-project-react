@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 
 from djoser.serializers import UserCreateSerializer, UserSerializer
 from drf_extra_fields.fields import Base64ImageField
@@ -18,7 +19,7 @@ class CustomUserCreateSerializer(UserCreateSerializer):
 
 
 class CustomUserSerializer(UserSerializer):
-    is_subscribed = serializers.ReadOnlyField(default=False)
+    is_subscribed = serializers.ReadOnlyField()
 
     class Meta:
         model = User
@@ -50,8 +51,8 @@ class SubscriptionSerializer(UserSerializer):
         read_only=True,
         source='recipes.all'
     )
-    is_subscribed = serializers.ReadOnlyField(default=False)
-    recipes_count = serializers.ReadOnlyField(default=0)
+    is_subscribed = serializers.ReadOnlyField()
+    recipes_count = serializers.ReadOnlyField()
 
     class Meta:
         model = User
@@ -92,8 +93,8 @@ class RecipeReadSerializer(serializers.ModelSerializer):
         read_only=True,
         many=True,
     )
-    is_in_shopping_cart = serializers.ReadOnlyField(default=False)
-    is_favorited = serializers.ReadOnlyField(default=False)
+    is_in_shopping_cart = serializers.ReadOnlyField()
+    is_favorited = serializers.ReadOnlyField()
 
     class Meta:
         model = Recipe
@@ -122,6 +123,11 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
                   'image', 'text', 'cooking_time')
 
     def to_representation(self, instance):
+        if self.context['request'].method == 'POST':
+            # Явно делаем запрос в БД, чтобы добавить нужные
+            # доп. поля для сериализатора (см. реализацию 'get_queryset')
+            queryset = self.context['view'].get_queryset()
+            instance = get_object_or_404(queryset, id=instance.id)
         return RecipeReadSerializer(instance).data
 
     @transaction.atomic
