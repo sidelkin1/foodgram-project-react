@@ -8,6 +8,8 @@ from rest_framework import serializers
 
 from recipes.models import Ingredient, Recipe, RecipeIngredient, Tag
 
+from . import validators
+
 User = get_user_model()
 
 
@@ -121,6 +123,14 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
         model = Recipe
         fields = ('tags', 'ingredients', 'name',
                   'image', 'text', 'cooking_time')
+        validators = (
+            validators.DuplicateValidator(
+                source='tags.id',
+            ),
+            validators.DuplicateValidator(
+                source='ingredients.id.id',
+            ),
+        )
 
     def to_representation(self, instance):
         if self.context['request'].method == 'POST':
