@@ -4,7 +4,7 @@ import pytest
 
 from users.models import Subscription
 
-from .common import reverse_query
+from .common import check_pagination_fields, check_subscriptions, reverse_query
 
 
 class Test02SubscriptionAPI:
@@ -28,25 +28,8 @@ class Test02SubscriptionAPI:
         )
 
         data = response.json()
-        recipe = data.pop('recipes')[0]
-        recipes_count = data.pop('recipes_count')
-        for field, value in data.items():
-            assert (getattr(author, field, None) == value
-                    if field != 'is_subscribed' else value), (
-                f'Проверьте, что при POST запросе `{url}` возвращаете корректные данные. '
-                f'Значение поля *{field}* не правильное'
-            )
-        for field, value in recipe.items():
-            model_value = getattr(recipes[0], field, None)
-            assert (model_value == value if field != 'image'
-                    else str(model_value) in value), (
-                f'Проверьте, что при POST запросе `{url}` возвращаете корректные данные. '
-                f'Значение поля *{field}* параметра `recipes` не правильное'
-            )
-        assert recipes_count == 1, (
-            f'Проверьте, что при POST запросе `{url}` возвращаете корректные данные. '
-            f'Значение поля *recipes_count* не правильное'
-        )
+        subscriptions = [{'author': author, 'recipes': [recipes[0]]}]
+        check_subscriptions(subscriptions, [data], url, 'POST', 'JSON', 'recipes')
 
     @pytest.mark.django_db(transaction=True)
     def test_02_subscribe_anon(self, client, recipes):
@@ -165,19 +148,8 @@ class Test02SubscriptionAPI:
         )
 
         data = response.json()
-        for param in ('count', 'next', 'previous', 'results'):
-            assert param in data, (
-                f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                'Не найден параметр `{param}`'
-            )
-        assert data['count'] == len(subscriptions), (
-            f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-            'Значение параметра `count` не правильное'
-        )
-        assert type(data['results']) == list and len(data['results']) == len(subscriptions), (
-            f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-            'Тип параметра `results` должен быть список'
-        )
+        check_pagination_fields(data, len(subscriptions), url)
+        check_subscriptions(subscriptions, data['results'], url, 'GET', 'results.author', 'results.recipes')
 
     @pytest.mark.django_db(transaction=True)
     def test_08_subscriptions_get_anon(self, client):
@@ -202,29 +174,17 @@ class Test02SubscriptionAPI:
             )
 
             data = response.json()
-            for param in ('count', 'results'):
-                assert param in data, (
-                    f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                    'Не найден параметр `{param}`'
-                )
-            assert data['count'] == 1, (
-                f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                'Значение параметра `count` не правильное'
-            )
-            assert type(data['results']) == list and len(data['results']) == 1, (
-                f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                f'Тип параметра `results` должен быть список с длиной 1'
-            )
+            check_pagination_fields(data, 1, url)
 
             result = data['results'][0]
-            for param in ('recipes', 'recipes_count'):
-                assert param in result, (
+            for field in ('recipes', 'recipes_count'):
+                assert field in result, (
                     f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                    f'Внутри `results` не найден параметр `{param}`'
+                    f'Внутри `results` не найдено поле `{field}`'
                 )
             assert type(result['recipes']) == list and len(result['recipes']) == limit, (
                 f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                f'Тип параметра `results.recipes` должен быть список с длиной {limit}'
+                f'Тип параметра `results.recipes` должен быть список длиной {limit}'
             )
             assert result['recipes_count'] == len(subscribed_recipes), (
                 f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '

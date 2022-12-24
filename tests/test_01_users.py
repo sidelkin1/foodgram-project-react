@@ -1,14 +1,12 @@
-from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 import pytest
 
-from .common import reverse_query
-
-User = get_user_model()
+from .common import check_attributes, check_pagination_fields, reverse_query
 
 
 class Test01UserAPI:
+
     @pytest.mark.django_db(transaction=True)
     def test_01_users_not_authenticated(self, client):
         url = reverse('api:user-list')
@@ -49,7 +47,7 @@ class Test01UserAPI:
         )
 
     @pytest.mark.django_db(transaction=True)
-    def test_04_users_get_anon(self, client, recipes):
+    def test_04_users_get_anon(self, client, authors):
         url = reverse('api:user-list')
         response = client.get(url)
         assert response.status_code != 404, (
@@ -62,27 +60,18 @@ class Test01UserAPI:
         )
 
         data = response.json()
-        for param in ('count', 'next', 'previous', 'results'):
-            assert param in data, (
-                f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                'Не найден параметр `{param}`'
-            )
-        assert data['count'] == len(recipes), (
-            f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-            'Значение параметра `count` не правильное'
-        )
-        assert type(data['results']) == list and len(data['results']) == len(recipes), (
-            f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-            'Тип параметра `results` должен быть список'
-        )
+        check_pagination_fields(data, len(authors), url)
 
-        for recipe, user in zip(recipes, data['results']):
-            for field, value in user.items():
-                assert (getattr(recipe.author, field, None) == value
-                        if field != 'is_subscribed' else not value), (
-                    f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                    f'Значение поля *{field}* параметра `results` не правильное'
-                )
+        fields = {
+            'email': (None, True),
+            'id': (None, True),
+            'username': (None, True),
+            'first_name': (None, True),
+            'last_name': (None, True),
+            'is_subscribed': (False, True),
+        }
+        for user, result in zip(authors, data['results']):
+            check_attributes(user, result, fields, url, data_name='results')
 
     @pytest.mark.django_db(transaction=True)
     def test_05_users_get_auth(self, user_client):
@@ -125,16 +114,4 @@ class Test01UserAPI:
             )
 
             data = response.json()
-            for param in ('count', 'results'):
-                assert param in data, (
-                    f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                    'Не найден параметр `{param}`'
-                )
-            assert data['count'] == len(recipes), (
-                f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                'Значение параметра `count` не правильное'
-            )
-            assert type(data['results']) == list and len(data['results']) == limit, (
-                f'Проверьте, что при GET запросе `{url}` возвращаете данные с пагинацией. '
-                f'Тип параметра `results` должен быть список с длиной {limit}'
-            )
+            check_pagination_fields(data, len(recipes), url, results_count=limit)

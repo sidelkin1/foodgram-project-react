@@ -4,6 +4,17 @@ from rest_framework.test import APIClient
 
 
 @pytest.fixture
+def user_data():
+    return {
+        'email': 'user@ya.ru',
+        'password': 'B;tdcr64',
+        'username': 'user',
+        'first_name': 'Vasya',
+        'last_name': 'Pupkin',
+    }
+
+
+@pytest.fixture
 def common_password():
     return '1234567'
 
