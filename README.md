@@ -84,7 +84,6 @@ http://localhost/admin
 | `DJANGO_SUPERUSER_PASSWORD` | admin | пароль суперпользователя (установите свой) |
 | `DJANGO_SUPERUSER_EMAIL` | admin@ya.ru | email суперпользователя (установите свой) |
 | `DJANGO_DEBUG` | False | режим отладки |
-| `NGINX_DOCKER_PORT` | 80 | проброшенный наружу порт nginx |
 
 ## Используемые технологии
 

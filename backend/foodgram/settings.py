@@ -129,6 +129,4 @@ DJOSER = {
     },
 }
 
-USE_X_FORWARDED_HOST = True
-
 AUTH_USER_MODEL = 'users.User'
