@@ -38,12 +38,9 @@ class RecipePreviewListSerializer(serializers.ListSerializer):
 
 
 class RecipePreviewSerializer(serializers.ModelSerializer):
-    image = Base64ImageField()
-
     class Meta:
         model = Recipe
         fields = ('id', 'name', 'image', 'cooking_time')
-        read_only_fields = ('id', 'name', 'image', 'cooking_time')
         list_serializer_class = RecipePreviewListSerializer
 
 
@@ -87,7 +84,6 @@ class RecipeIngredientReadSerializer(serializers.ModelSerializer):
 
 
 class RecipeReadSerializer(serializers.ModelSerializer):
-    image = Base64ImageField()
     author = CustomUserSerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
     ingredients = RecipeIngredientReadSerializer(
